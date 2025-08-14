@@ -10,6 +10,7 @@ mod processor;
 mod str_or_bytes;
 mod vsb;
 mod ws;
+mod ws_str;
 mod ws_str_buffer;
 
 #[cfg(not(varnishsys_6))]

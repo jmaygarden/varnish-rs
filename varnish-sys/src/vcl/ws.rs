@@ -27,6 +27,7 @@ use crate::ffi::WS_Inside;
 use crate::ffi::{txt, VCL_STRING};
 #[cfg(not(varnishsys_6))]
 use crate::ffi::{vrt_blob, WS_Allocated, VCL_BLOB};
+use crate::vcl::ws_str::WsStr;
 #[cfg(not(varnishsys_6))]
 pub use crate::vcl::ws_str_buffer::WsBlobBuffer;
 pub use crate::vcl::ws_str_buffer::{WsBuffer, WsStrBuffer, WsTempBuffer};
@@ -139,10 +140,7 @@ impl<'ctx> Workspace<'ctx> {
 
     /// Allocate `[u8; size]` array on Workspace.
     /// Returns a reference to uninitialized buffer, or an out of memory error.
-    pub fn allocate(
-        &self,
-        size: NonZeroUsize,
-    ) -> Result<&'ctx mut [MaybeUninit<u8>], VclError> {
+    pub fn allocate(&self, size: NonZeroUsize) -> Result<&'ctx mut [MaybeUninit<u8>], VclError> {
         let ptr = unsafe { self.alloc(size) };
         if ptr.is_null() {
             Err(VclError::WsOutOfMemory(size))
@@ -255,6 +253,21 @@ impl<'ctx> Workspace<'ctx> {
     /// while tying the lifetime to the workspace.
     pub fn slice_builder<T: Copy>(&self) -> VclResult<WsTempBuffer<'ctx, T>> {
         unsafe { WsTempBuffer::new(validate_ws(self.raw)) }
+    }
+
+    pub fn store_c_str(&self, src: &CStr) -> VclResult<WsStr<'_>> {
+        let len = NonZeroUsize::new(src.count_bytes() + 1).unwrap();
+        let ptr = unsafe { self.alloc(len) };
+        let dst: &mut [u8] = if ptr.is_null() {
+            Err(VclError::WsOutOfMemory(len))
+        } else {
+            Ok(unsafe { from_raw_parts_mut(ptr.cast(), len.get()) })
+        }?;
+        let len = len.get() - 1;
+        dst[..len].copy_from_slice(src.to_bytes());
+        dst[len] = 0u8;
+
+        Ok(WsStr::new(VCL_STRING(ptr.cast())))
     }
 }
 

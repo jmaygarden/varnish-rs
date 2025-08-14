@@ -9,6 +9,7 @@ use crate::ffi;
 use crate::ffi::VCL_STRING;
 #[cfg(not(varnishsys_6))]
 use crate::ffi::{vrt_blob, VCL_BLOB};
+use crate::vcl::ws_str::WsStr;
 use crate::vcl::VclError::WsOutOfMemory;
 use crate::vcl::VclResult;
 
@@ -199,9 +200,9 @@ impl<Item, Suffix, Output> Drop for WsBuffer<'_, Item, Suffix, Output> {
     }
 }
 
-impl WsStrBuffer<'_> {
+impl<'ws> WsStrBuffer<'ws> {
     /// Finish writing to the [`WsBuffer`], returning the allocated [`VCL_STRING`].
-    pub fn finish(mut self) -> VCL_STRING {
+    pub fn finish(mut self) -> WsStr<'ws> {
         unsafe {
             // SAFETY:
             // Since we reserved one extra byte for the NUL terminator,
@@ -214,7 +215,7 @@ impl WsStrBuffer<'_> {
             // Reserve written data including the NUL terminator, and release the rest
             self.release(true);
 
-            VCL_STRING(result)
+            WsStr::new(VCL_STRING(result))
         }
     }
 }
@@ -289,7 +290,7 @@ mod tests {
         buf.write_all(b"0123456789").unwrap();
         assert_eq!(buf.remaining(), 149);
         // saving 10 bytes + nul
-        assert_eq!(get_cstr(&buf.finish()), c"0123456789");
+        assert_eq!(get_cstr(unsafe { &buf.finish().into_vcl() }), c"0123456789");
 
         let mut buf = ws.vcl_string_builder().unwrap();
         assert_eq!(buf.remaining(), 160 - round_up_to_usize(10 + 1) - 1);
@@ -304,7 +305,7 @@ mod tests {
         buf.write_all(&fill).unwrap();
         assert_eq!(buf.remaining(), 1);
         assert_eq!(
-            get_cstr(&buf.finish()),
+            get_cstr(unsafe { &buf.finish().into_vcl() }),
             CString::new(fill).unwrap().as_c_str()
         );
 
@@ -319,7 +320,7 @@ mod tests {
         buf.write_all(&fill).unwrap();
         assert_eq!(buf.remaining(), 0);
         assert_eq!(
-            get_cstr(&buf.finish()),
+            get_cstr(unsafe { &buf.finish().into_vcl() }),
             CString::new(fill).unwrap().as_c_str()
         );
 
