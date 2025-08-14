@@ -117,7 +117,7 @@ impl<'ctx> Workspace<'ctx> {
     ///
     /// # Safety
     /// Allocated memory is not initialized.
-    pub unsafe fn alloc(&mut self, size: NonZeroUsize) -> *mut c_void {
+    pub unsafe fn alloc(&self, size: NonZeroUsize) -> *mut c_void {
         validate_ws(self.raw).alloc(size.get() as u32)
     }
 
@@ -140,7 +140,7 @@ impl<'ctx> Workspace<'ctx> {
     /// Allocate `[u8; size]` array on Workspace.
     /// Returns a reference to uninitialized buffer, or an out of memory error.
     pub fn allocate(
-        &mut self,
+        &self,
         size: NonZeroUsize,
     ) -> Result<&'ctx mut [MaybeUninit<u8>], VclError> {
         let ptr = unsafe { self.alloc(size) };
@@ -152,7 +152,7 @@ impl<'ctx> Workspace<'ctx> {
     }
 
     /// Allocate `[u8; size]` array on Workspace, and zero it.
-    pub fn allocate_zeroed(&mut self, size: NonZeroUsize) -> Result<&'ctx mut [u8], VclError> {
+    pub fn allocate_zeroed(&self, size: NonZeroUsize) -> Result<&'ctx mut [u8], VclError> {
         let buf = self.allocate(size)?;
         unsafe {
             buf.as_mut_ptr().write_bytes(0, buf.len());
@@ -162,7 +162,7 @@ impl<'ctx> Workspace<'ctx> {
 
     /// Allocate memory on Workspace, and move a value into it.
     /// The value will be dropped in case of out of memory error.
-    pub(crate) fn copy_value<T>(&mut self, value: T) -> Result<&'ctx mut T, VclError> {
+    pub(crate) fn copy_value<T>(&self, value: T) -> Result<&'ctx mut T, VclError> {
         let size = NonZeroUsize::new(size_of::<T>())
             .unwrap_or_else(|| panic!("Type {} has sizeof=0", type_name::<T>()));
 
@@ -173,7 +173,7 @@ impl<'ctx> Workspace<'ctx> {
     }
 
     /// Copy any `AsRef<[u8]>` into the workspace
-    fn copy_bytes(&mut self, src: impl AsRef<[u8]>) -> Result<&'ctx [u8], VclError> {
+    fn copy_bytes(&self, src: impl AsRef<[u8]>) -> Result<&'ctx [u8], VclError> {
         // Re-implement unstable `maybe_uninit_write_slice` and `maybe_uninit_slice`
         // See https://github.com/rust-lang/rust/issues/79995
         // See https://github.com/rust-lang/rust/issues/63569
@@ -188,7 +188,7 @@ impl<'ctx> Workspace<'ctx> {
 
     /// Copy any `AsRef<[u8]>` into a new [`VCL_BLOB`] stored in the workspace
     #[cfg(not(varnishsys_6))]
-    pub fn copy_blob(&mut self, value: impl AsRef<[u8]>) -> Result<VCL_BLOB, VclError> {
+    pub fn copy_blob(&self, value: impl AsRef<[u8]>) -> Result<VCL_BLOB, VclError> {
         let buf = self.copy_bytes(value)?;
         let blob = self.copy_value(vrt_blob {
             blob: ptr::from_ref(buf).cast::<c_void>(),
@@ -199,20 +199,20 @@ impl<'ctx> Workspace<'ctx> {
     }
 
     /// Copy any `AsRef<CStr>` into a new [`txt`] stored in the workspace
-    pub fn copy_txt(&mut self, value: impl AsRef<CStr>) -> Result<txt, VclError> {
+    pub fn copy_txt(&self, value: impl AsRef<CStr>) -> Result<txt, VclError> {
         let dest = self.copy_bytes(value.as_ref().to_bytes_with_nul())?;
         Ok(bytes_with_nul_to_txt(dest))
     }
 
     /// Copy any `AsRef<CStr>` into a new [`VCL_STRING`] stored in the workspace
-    pub fn copy_cstr(&mut self, value: impl AsRef<CStr>) -> Result<VCL_STRING, VclError> {
+    pub fn copy_cstr(&self, value: impl AsRef<CStr>) -> Result<VCL_STRING, VclError> {
         Ok(VCL_STRING(self.copy_txt(value)?.b))
     }
 
     /// Same as [`Workspace::copy_blob`], copying bytes into Workspace, but treats bytes
     /// as a string with an optional NULL character at the end.  A `NULL` is added if it is missing.
     /// Returns an error if `src` contain NULL characters in a non-last position.
-    pub fn copy_bytes_with_null(&mut self, src: impl AsRef<[u8]>) -> Result<txt, VclError> {
+    pub fn copy_bytes_with_null(&self, src: impl AsRef<[u8]>) -> Result<txt, VclError> {
         let src = src.as_ref();
         match memchr(0, src) {
             Some(pos) if pos + 1 == src.len() => {
@@ -237,14 +237,14 @@ impl<'ctx> Workspace<'ctx> {
     /// is called, resulting in an unsafe [`VCL_STRING`] that can be returned to Varnish.
     /// Note that it is possible for the returned buf size to be zero, which
     /// would result in a zero-length nul-terminated [`VCL_STRING`] if finished.
-    pub fn vcl_string_builder(&mut self) -> VclResult<WsStrBuffer<'ctx>> {
+    pub fn vcl_string_builder(&self) -> VclResult<WsStrBuffer<'ctx>> {
         unsafe { WsStrBuffer::new(validate_ws(self.raw)) }
     }
 
     /// Allocate workspace free memory as a byte buffer until [`WsBlobBuffer::finish()`]
     /// is called, resulting in an unsafe [`VCL_BLOB`] that can be returned to Varnish.
     #[cfg(not(varnishsys_6))]
-    pub fn vcl_blob_builder(&mut self) -> VclResult<WsBlobBuffer<'ctx>> {
+    pub fn vcl_blob_builder(&self) -> VclResult<WsBlobBuffer<'ctx>> {
         unsafe { WsBlobBuffer::new(validate_ws(self.raw)) }
     }
 
@@ -253,7 +253,7 @@ impl<'ctx> Workspace<'ctx> {
     /// to be returned to Varnish, but may be shared among context users.
     /// The buffer is returned as a `&'ws [T]` to allow mutable access,
     /// while tying the lifetime to the workspace.
-    pub fn slice_builder<T: Copy>(&mut self) -> VclResult<WsTempBuffer<'ctx, T>> {
+    pub fn slice_builder<T: Copy>(&self) -> VclResult<WsTempBuffer<'ctx, T>> {
         unsafe { WsTempBuffer::new(validate_ws(self.raw)) }
     }
 }
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn ws_test_alloc() {
         let mut test_ws = TestWS::new(160);
-        let mut ws = test_ws.workspace();
+        let ws = test_ws.workspace();
         for _ in 0..10 {
             unsafe {
                 assert!(!ws.alloc(NonZero::new(16).unwrap()).is_null());

@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn str_buffer() {
         let mut test_ws = TestWS::new(160);
-        let mut ws = test_ws.workspace();
+        let ws = test_ws.workspace();
 
         // first buffer call gets all available space
         let mut buf = ws.vcl_string_builder().unwrap();
@@ -312,7 +312,7 @@ mod tests {
 
         // Will to the end of the buffer
         let mut test_ws = TestWS::new(160);
-        let mut ws = test_ws.workspace();
+        let ws = test_ws.workspace();
         let mut buf = ws.vcl_string_builder().unwrap();
         assert_eq!(buf.remaining(), 159);
         let fill = vec![b'x'; buf.remaining()];
@@ -334,7 +334,7 @@ mod tests {
 
         // init a workspace
         let mut test_ws = TestWS::new(160);
-        let mut ws = test_ws.workspace();
+        let ws = test_ws.workspace();
 
         // first buffer call gets all available space
         let mut buf = ws.vcl_blob_builder().unwrap();
@@ -368,7 +368,7 @@ mod tests {
     fn temp_buffer() {
         assert_eq!(4, size_of::<TestStruct>());
         let mut test_ws = TestWS::new(160);
-        let mut ws = test_ws.workspace();
+        let ws = test_ws.workspace();
 
         // first buffer call gets all available space
         let mut buf = ws.slice_builder::<TestStruct>().unwrap();

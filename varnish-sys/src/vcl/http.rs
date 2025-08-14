@@ -47,7 +47,7 @@ impl HttpHeaders<'_> {
         assert!(idx < self.raw.nhd);
 
         /* XXX: aliasing warning, it's the same pointer as the one in Ctx */
-        let mut ws = Workspace::from_ptr(self.raw.ws);
+        let ws = Workspace::from_ptr(self.raw.ws);
         unsafe {
             let hd = self.raw.hd.offset(idx as isize).as_mut().unwrap();
             *hd = ws.copy_bytes_with_null(value.into())?;
